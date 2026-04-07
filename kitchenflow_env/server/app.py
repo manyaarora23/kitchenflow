@@ -3,16 +3,6 @@ FastAPI application for KitchenFlow-v1 — Ghost Kitchen Dispatcher.
 
 Session-managed HTTP server. Each reset returns an episode_id;
 pass it with every step to maintain state across the simulation.
-
-Endpoints:
-    POST /reset    Start a new episode
-    POST /step     Advance simulation by 1 minute with dispatch decisions
-    GET  /state    Current session state
-    GET  /schema   Action / observation schemas
-    GET  /metadata Environment metadata
-    GET  /health   Health check
-    POST /mcp      JSON-RPC 2.0 stub
-    GET  /tasks    List all tasks
 """
 
 import threading
@@ -20,7 +10,7 @@ import uuid
 from typing import Any, Dict, Optional
 
 from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse  # Added RedirectResponse
 
 try:
     from ..models import KitchenAction, KitchenObservation
@@ -58,6 +48,12 @@ app = FastAPI(
         "cold food, and driver cancellations."
     ),
 )
+
+# ── Redirect Root to Docs ─────────────────────────────────────────────────────
+@app.get("/", include_in_schema=False)
+def redirect_to_docs():
+    """Redirects the root URL directly to the Swagger UI page."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health")
@@ -99,7 +95,6 @@ def schema():
 def reset(body: Dict[str, Any] = Body(default={})):
     """
     Start a new episode.
-    Optional: {"task_id": "T1_single_order_dispatch", "episode_id": "my-session"}
     """
     task_id = body.get("task_id")
     sid     = body.get("episode_id") or str(uuid.uuid4())
@@ -112,14 +107,6 @@ def reset(body: Dict[str, Any] = Body(default={})):
 def step(body: Dict[str, Any] = Body(...)):
     """
     Advance simulation by 1 minute.
-
-    Body:
-      action     (dict, required) — {"dispatch_decisions": {"ORD001": 1, "ORD002": 0}}
-      episode_id (str, optional)  — session ID from reset
-
-    Action values:
-      0 = wait this minute
-      1 = summon driver for this order (one-time trigger)
     """
     action_data = body.get("action")
     if action_data is None:
@@ -167,7 +154,6 @@ def list_tasks():
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main(host: str = "0.0.0.0", port: int = 7860):
-    """Entry point — enables: uv run --project . server"""
     import uvicorn
     uvicorn.run(app, host=host, port=port)
 
